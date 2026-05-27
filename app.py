@@ -2,7 +2,6 @@ import streamlit as st
 import cv2
 import numpy as np
 import tensorflow as tf
-import face_recognition
 from PIL import Image
 
 # --- 1. CẤU HÌNH TRANG STREAMLIT ---
@@ -37,27 +36,39 @@ def apply_clahe(img):
     return cv2.cvtColor(limg, cv2.COLOR_LAB2RGB)
 
 def process_and_predict(image_rgb):
+    # Khởi tạo bộ dò mặt siêu nhẹ của OpenCV
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    
+    # OpenCV cần ảnh xám để dò mặt nhanh hơn
+    gray = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2GRAY)
+    
     # Dò mặt
-    face_locations = face_recognition.face_locations(image_rgb)
-    if len(face_locations) == 0:
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+    
+    if len(faces) == 0:
         return None, "⚠️ Không tìm thấy khuôn mặt nào! Vui lòng thử lại."
 
-    # Cắt có lề (15%)
-    top, right, bottom, left = face_locations[0]
-    h, w = image_rgb.shape[0], image_rgb.shape[1]
-    pad = int((bottom - top) * 0.15)
+    # Lấy khuôn mặt đầu tiên (x, y là tọa độ góc trái trên, w, h là chiều rộng, cao)
+    x, y, w, h = faces[0]
+    
+    # Thêm lề (margin) 15% để cắt không bị quá sát
+    pad_y = int(h * 0.15)
+    pad_x = int(w * 0.15)
+    
+    img_h, img_w = image_rgb.shape[0], image_rgb.shape[1]
+    
+    top_pad = max(0, y - pad_y)
+    bottom_pad = min(img_h, y + h + pad_y)
+    left_pad = max(0, x - pad_x)
+    right_pad = min(img_w, x + w + pad_x)
 
-    top_pad = max(0, top - pad)
-    bottom_pad = min(h, bottom + pad)
-    left_pad = max(0, left - pad)
-    right_pad = min(w, right + pad)
-
+    # Cắt khuôn mặt
     face_crop = image_rgb[top_pad:bottom_pad, left_pad:right_pad]
     
     # Cân bằng sáng CLAHE
     face_clahe = apply_clahe(face_crop)
 
-    # Ép kích thước
+    # Ép kích thước chuẩn 200x200 cho MobileNetV2
     face_tensor = tf.convert_to_tensor(face_clahe)
     img_resized = tf.image.resize(face_tensor, [IMG_HEIGHT, IMG_WIDTH])
     img_array = tf.keras.utils.img_to_array(img_resized)
@@ -72,56 +83,3 @@ def process_and_predict(image_rgb):
     do_tu_tin = score[index_du_doan] * 100
     
     return face_clahe, (ten_du_doan, do_tu_tin)
-
-# --- 4. GIAO DIỆN NGƯỜI DÙNG ---
-# Tạo 2 tab: Một cho Upload, Một cho Webcam (Tính năng rất hay của Streamlit)
-tab1, tab2 = st.tabs(["📸 Mở Webcam", "📂 Tải ảnh lên"])
-
-# Biến lưu trữ ảnh đầu vào
-img_file_buffer = None
-
-with tab1:
-    st.info("Hãy cho phép trình duyệt sử dụng Camera. Đảm bảo ánh sáng chiếu rõ khuôn mặt.")
-    cam_buffer = st.camera_input("Chụp ảnh bằng Webcam")
-    if cam_buffer:
-        img_file_buffer = cam_buffer
-
-with tab2:
-    upload_buffer = st.file_uploader("Chọn file ảnh (jpg, png, jpeg)", type=["jpg", "jpeg", "png"])
-    if upload_buffer:
-        img_file_buffer = upload_buffer
-
-# Xử lý khi có ảnh đầu vào
-if img_file_buffer is not None:
-    # Đọc ảnh bằng PIL và chuyển sang Numpy array (RGB chuẩn)
-    image = Image.open(img_file_buffer)
-    image_rgb = np.array(image)
-
-    # Nếu ảnh có kênh Alpha (RGBA từ png), chuyển về RGB
-    if image_rgb.shape[-1] == 4:
-        image_rgb = image_rgb[..., :3]
-
-    st.markdown("---")
-    st.subheader("⚙️ Kết quả phân tích AI")
-    
-    with st.spinner('Đang dò tìm và phân tích khuôn mặt...'):
-        face_crop, result = process_and_predict(image_rgb)
-        
-        if face_crop is None:
-            st.error(result)
-        else:
-            ten, do_tu_tin = result
-            
-            # Chia cột hiển thị cho đẹp
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.image(image_rgb, caption="Ảnh Gốc", use_container_width=True)
-            with col2:
-                st.image(face_crop, caption="Khuôn mặt AI trích xuất & làm nét", use_container_width=True)
-                
-                # Hiển thị box kết quả nổi bật
-                if do_tu_tin > 70:
-                    st.success(f"**Danh tính:** {ten.replace('_', ' ').upper()} \n\n **Độ tự tin:** {do_tu_tin:.2f}%")
-                else:
-                    st.warning(f"**Danh tính (Thiếu chắc chắn):** {ten.replace('_', ' ').upper()} \n\n **Độ tự tin:** {do_tu_tin:.2f}%")

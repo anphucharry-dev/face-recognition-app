@@ -9,24 +9,21 @@ st.set_page_config(page_title="App Nhận Diện Khuôn Mặt", page_icon="👤"
 st.title("🔥 Ứng Dụng Nhận Diện Khuôn Mặt Lớp Học")
 st.markdown("Hệ thống AI tự động dò mặt, làm nét và dự đoán danh tính bằng MobileNetV2.")
 
-# --- 2. TẢI MÔ HÌNH VÀ CẤU HÌNH (DÙNG CACHE ĐỂ TỐI ƯU TỐC ĐỘ) ---
+# --- 2. TẢI MÔ HÌNH VÀ CẤU HÌNH ---
 @st.cache_resource
 def load_model():
-    # LƯU Ý: Đảm bảo file .keras nằm cùng thư mục với file app.py này
-    # Hoặc thay đổi đường dẫn tuyệt đối tới file mô hình của bạn
     return tf.keras.models.load_model('mobilenet_face_model.keras')
 
 model = load_model()
 
-# Cập nhật danh sách 22 tên thành viên trong lớp bạn
+# CHÚ Ý: Nhớ điền đủ tên 22 thành viên vào đây giống y hệt lúc train
 class_names = sorted([
     'Nguyen_Van_A', 'Tran_Thi_B', 'Doan_Hung', 'Le_Tuan_Thanh',
-    # ... (Thêm cho đủ 22 người)
 ])
 num_classes = len(class_names)
 IMG_HEIGHT, IMG_WIDTH = 200, 200
 
-# --- 3. CÁC HÀM TIỀN XỬ LÝ (GIỮ NGUYÊN TỪ BẢN TRƯỚC) ---
+# --- 3. CÁC HÀM TIỀN XỬ LÝ (SỬ DỤNG OPENCV SIÊU NHẸ) ---
 def apply_clahe(img):
     lab = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
     l, a, b = cv2.split(lab)
@@ -36,10 +33,8 @@ def apply_clahe(img):
     return cv2.cvtColor(limg, cv2.COLOR_LAB2RGB)
 
 def process_and_predict(image_rgb):
-    # Khởi tạo bộ dò mặt siêu nhẹ của OpenCV
+    # Khởi tạo bộ dò mặt của OpenCV
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-    
-    # OpenCV cần ảnh xám để dò mặt nhanh hơn
     gray = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2GRAY)
     
     # Dò mặt
@@ -48,33 +43,27 @@ def process_and_predict(image_rgb):
     if len(faces) == 0:
         return None, "⚠️ Không tìm thấy khuôn mặt nào! Vui lòng thử lại."
 
-    # Lấy khuôn mặt đầu tiên (x, y là tọa độ góc trái trên, w, h là chiều rộng, cao)
+    # Cắt khuôn mặt đầu tiên tìm thấy kèm thêm lề 15%
     x, y, w, h = faces[0]
-    
-    # Thêm lề (margin) 15% để cắt không bị quá sát
     pad_y = int(h * 0.15)
     pad_x = int(w * 0.15)
     
     img_h, img_w = image_rgb.shape[0], image_rgb.shape[1]
-    
     top_pad = max(0, y - pad_y)
     bottom_pad = min(img_h, y + h + pad_y)
     left_pad = max(0, x - pad_x)
     right_pad = min(img_w, x + w + pad_x)
 
-    # Cắt khuôn mặt
     face_crop = image_rgb[top_pad:bottom_pad, left_pad:right_pad]
-    
-    # Cân bằng sáng CLAHE
     face_clahe = apply_clahe(face_crop)
 
-    # Ép kích thước chuẩn 200x200 cho MobileNetV2
+    # Ép chuẩn 200x200
     face_tensor = tf.convert_to_tensor(face_clahe)
     img_resized = tf.image.resize(face_tensor, [IMG_HEIGHT, IMG_WIDTH])
     img_array = tf.keras.utils.img_to_array(img_resized)
     img_array = tf.expand_dims(img_array, 0)
 
-    # Dự đoán
+    # AI Dự đoán
     predictions = model.predict(img_array)
     score = predictions[0]
     
@@ -83,3 +72,49 @@ def process_and_predict(image_rgb):
     do_tu_tin = score[index_du_doan] * 100
     
     return face_clahe, (ten_du_doan, do_tu_tin)
+
+# --- 4. GIAO DIỆN NGƯỜI DÙNG ---
+tab1, tab2 = st.tabs(["📸 Mở Webcam", "📂 Tải ảnh lên"])
+img_file_buffer = None
+
+with tab1:
+    st.info("Hãy cho phép trình duyệt sử dụng Camera. Đảm bảo ánh sáng chiếu rõ khuôn mặt.")
+    cam_buffer = st.camera_input("Chụp ảnh bằng Webcam")
+    if cam_buffer:
+        img_file_buffer = cam_buffer
+
+with tab2:
+    upload_buffer = st.file_uploader("Chọn file ảnh (jpg, png, jpeg)", type=["jpg", "jpeg", "png"])
+    if upload_buffer:
+        img_file_buffer = upload_buffer
+
+# --- 5. XỬ LÝ KẾT QUẢ HIỂN THỊ ---
+if img_file_buffer is not None:
+    image = Image.open(img_file_buffer)
+    image_rgb = np.array(image)
+
+    # Chuyển ảnh RGBA (nếu có) về RGB
+    if image_rgb.shape[-1] == 4:
+        image_rgb = image_rgb[..., :3]
+
+    st.markdown("---")
+    st.subheader("⚙️ Kết quả phân tích AI")
+    
+    with st.spinner('Đang dò tìm và phân tích khuôn mặt...'):
+        face_crop, result = process_and_predict(image_rgb)
+        
+        if face_crop is None:
+            st.error(result)
+        else:
+            ten, do_tu_tin = result
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.image(image_rgb, caption="Ảnh Gốc", use_container_width=True)
+            with col2:
+                st.image(face_crop, caption="Khuôn mặt AI trích xuất", use_container_width=True)
+                
+                if do_tu_tin > 70:
+                    st.success(f"**Danh tính:** {ten.replace('_', ' ').upper()} \n\n **Độ tự tin:** {do_tu_tin:.2f}%")
+                else:
+                    st.warning(f"**Danh tính (Thiếu chắc chắn):** {ten.replace('_', ' ').upper()} \n\n **Độ tự tin:** {do_tu_tin:.2f}%")

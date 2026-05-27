@@ -18,7 +18,7 @@ model = load_model()
 
 # CHÚ Ý: Nhớ điền đủ tên 22 thành viên vào đây giống y hệt lúc train
 class_names = sorted([
-    'Nguyen_Van_A', 'Tran_Thi_B', 'Doan_Hung', 'Le_Tuan_Thanh',
+    'HoangKyAnh', 'Lê Quang Dũng', 'Lê Tuấn Thành', 'Lương Ngọc Thuận', 'Ngô Quốc Trung', 'Nguyen Ngoc Bao', 'Nguyễn Hoàng Quế Châu ', 'Nguyễn Phạm Hoàng An', 'Nguyễn Thị Khánh Lê', 'Nguyễn Thị Ngọc Tuyết', 'Nguyễn Tiến Mạnh', 'Nguyễn Việt Đức', 'Nguyễn Đặng Vinh Phúc', 'Phạm Gia Thành Duy ', 'Phạm Hứa Nhật Minh ', 'Phạm Nguyễn Bảo Châu ', 'Phạm Phú Hoà', 'Trần Hải Yến', 'Vũ Quang Thái', 'Đinh Hữu Khánh Anh', 'Đoàn Hùng', 'Đỗ An Phúc',
 ])
 num_classes = len(class_names)
 IMG_HEIGHT, IMG_WIDTH = 200, 200

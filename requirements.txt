@@ -1,0 +1,6 @@
+streamlit
+tensorflow
+opencv-python-headless
+face_recognition
+numpy
+Pillow
